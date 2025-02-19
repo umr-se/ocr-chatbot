@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+paddleocr
+pillow
+google-generativeai

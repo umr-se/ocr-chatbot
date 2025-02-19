@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chatbot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f9;
+    }
+    .container {
+      max-width: 600px;
+      margin: 50px auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .chatbox {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
+      height: 300px;
+      overflow-y: auto;
+      background-color: #fafafa;
+      margin-bottom: 10px;
+    }
+    .message-container {
+      display: flex;
+      margin: 10px 0;
+    }
+    .user-message {
+      background-color: #d8eafd;
+      color: #007bff;
+      padding: 10px 15px;
+      border-radius: 10px;
+      max-width: 75%;
+      word-wrap: break-word;
+      align-self: flex-end;
+      margin-left: auto;
+    }
+    .bot-message {
+      background-color: #e8f5e9;
+      color: #333;
+      padding: 10px 15px;
+      border-radius: 10px;
+      max-width: 75%;
+      word-wrap: break-word;
+      align-self: flex-start;
+      margin-right: auto;
+      white-space: pre-wrap;  /* Preserve formatting and line breaks */
+    }
+    .input-area {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .input-area textarea {
+      flex-grow: 1;
+      padding: 10px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      resize: none;
+      height: 20px;
+    }
+    .input-area button {
+      padding: 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .input-area button:hover {
+      background-color: #0056b3;
+    }
+    .attachment-button {
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 10px;
+      font-size: 16px;
+      color: #007bff;
+      margin-bottom: 10px;
+    }
+    .attachment-button:hover {
+      color: #0056b3;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    .loading {
+      text-align: center;
+      color: #007bff;
+      margin: 10px 0;
+    }
+    .error {
+      color: red;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Chatbot</h1>
+    
+    <div class="chatbox" id="chatbox"></div>
+
+    <button type="button" class="attachment-button" id="attachmentButton">
+      📎 Attach Image
+    </button>
+    <input type="file" id="file" name="file" accept="image/*" />
+
+    <form id="chat-form" enctype="multipart/form-data">
+      <div class="input-area">
+        <textarea id="prompt" name="prompt" rows="3" placeholder="Type your message here..."></textarea>
+        <button type="submit">Send</button>
+      </div>
+    </form>
+
+    <div class="loading" id="loading" style="display:none;">Processing... Please wait.</div>
+    <div class="error" id="error"></div>
+  </div>
+
+  <script>
+    const chatbox = document.getElementById("chatbox");
+    const form = document.getElementById("chat-form");
+    const loadingDiv = document.getElementById("loading");
+    const errorDiv = document.getElementById("error");
+    const promptInput = document.getElementById("prompt");
+
+    document.getElementById("attachmentButton").addEventListener("click", function() {
+      document.getElementById("file").click();
+    });
+
+    document.getElementById("file").addEventListener("change", function() {
+      const fileName = this.files[0] ? this.files[0].name : "";
+      if (fileName) {
+        appendMessage(fileName, "user-message");
+      }
+    });
+
+    promptInput.addEventListener("keydown", function(event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.dispatchEvent(new Event("submit"));
+      }
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const fileInput = document.getElementById("file");
+      const userMessage = promptInput.value.trim();
+      const formData = new FormData();
+
+      errorDiv.textContent = "";
+      loadingDiv.style.display = "block";
+
+      const file = fileInput.files[0];
+      if (file) {
+        formData.append("file", file);
+      }
+      if (userMessage) {
+        formData.append("prompt", userMessage);
+      }
+
+      if (userMessage) {
+        appendMessage(userMessage, "user-message");
+      }
+      promptInput.value = "";
+
+      try {
+        const response = await fetch("/analyze", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const extractedText = data.extracted_text || "";
+        const geminiResponse = data.gemini_analysis || "No analysis performed.";
+
+        if (file && extractedText) {
+          appendMessage(`Extracted Text: ${extractedText.replace(/\n/g, "<br />")}`, "bot-message");
+        }
+        appendMessage(geminiResponse, "bot-message");
+      } catch (error) {
+        errorDiv.textContent = error.message;
+      } finally {
+        loadingDiv.style.display = "none";
+      }
+    });
+
+    function appendMessage(text, className) {
+      const containerDiv = document.createElement("div");
+      containerDiv.className = "message-container";
+      const messageDiv = document.createElement("div");
+      messageDiv.className = className;
+
+      // If it's a bot message, format headings, bold, and bullet points
+      if (className === "bot-message") {
+        let formattedText = text;
+
+        // Format text with asterisks as bold
+        formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        // Handle headings: # for H1 and ## for H2
+        formattedText = formattedText.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+        formattedText = formattedText.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+
+        // Replace lines starting with a single * with bullet points
+        formattedText = formattedText.replace(/^\*(.*?)$/gm, '<ul><li>$1</li></ul>');
+
+        // Replace newlines with <br /> to keep text structured
+        formattedText = formattedText.replace(/\n/g, "<br />");
+
+        messageDiv.innerHTML = formattedText;
+      } else {
+        messageDiv.innerHTML = text;
+      }
+
+      containerDiv.appendChild(messageDiv);
+      chatbox.appendChild(containerDiv);
+      chatbox.scrollTop = chatbox.scrollHeight;
+    }
+  </script>
+</body>
+</html>
